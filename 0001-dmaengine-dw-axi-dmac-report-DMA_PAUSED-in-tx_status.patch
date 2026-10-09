@@ -1,0 +1,45 @@
+From 65cb25c9084ed372afa70feb2bcad28bfa3bf34a Mon Sep 17 00:00:00 2001
+From: Baineng Shou <shoubaineng@gmail.com>
+Date: Wed, 16 Sep 2026 13:13:05 +0800
+Subject: [PATCH] dmaengine: dw-axi-dmac: report DMA_PAUSED in tx_status
+
+dma_chan_tx_status() never returns DMA_PAUSED even after the client has
+paused the channel: dma_cookie_status() can only yield COMPLETE or
+IN_PROGRESS, and the previous
+
+    if (chan->is_paused && ret == DMA_IN_PROGRESS)
+        ret = DMA_PAUSED;
+
+mapping was dropped when dma_chan_tx_status() was rewritten to add burst
+residue reporting in commit 8e55444da65c ("dmaengine: dw-axi-dmac:
+Support burst residue granularity"). Restore it so clients that
+distinguish a paused transfer from a running one get the correct status.
+
+The check is placed under vc.lock together with the residue calculation,
+since is_paused is documented as protected by vc.lock. The residue
+itself is unaffected: while paused the hardware is suspended, so
+completed_blocks does not advance and the reported residue stays valid.
+
+Fixes: 8e55444da65c ("dmaengine: dw-axi-dmac: Support burst residue granularity")
+Signed-off-by: Baineng Shou <shoubaineng@gmail.com>
+---
+ drivers/dma/dw-axi-dmac/dw-axi-dmac-platform.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/drivers/dma/dw-axi-dmac/dw-axi-dmac-platform.c b/drivers/dma/dw-axi-dmac/dw-axi-dmac-platform.c
+index bcefaff03b5c..9dc1cf6ce5fe 100644
+--- a/drivers/dma/dw-axi-dmac/dw-axi-dmac-platform.c
++++ b/drivers/dma/dw-axi-dmac/dw-axi-dmac-platform.c
+@@ -372,6 +372,9 @@ dma_chan_tx_status(struct dma_chan *dchan, dma_cookie_t cookie,
+ 
+ 	spin_lock_irqsave(&chan->vc.lock, flags);
+ 
++	if (chan->is_paused && status == DMA_IN_PROGRESS)
++		status = DMA_PAUSED;
++
+ 	vdesc = vchan_find_desc(&chan->vc, cookie);
+ 	if (vdesc) {
+ 		length = vd_to_axi_desc(vdesc)->length;
+-- 
+2.34.1
+

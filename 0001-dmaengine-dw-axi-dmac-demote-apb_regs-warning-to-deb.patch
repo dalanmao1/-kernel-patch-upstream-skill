@@ -1,0 +1,37 @@
+From 475b9f57ed351db93e4c7d097cf9920f6e622e98 Mon Sep 17 00:00:00 2001
+From: Baineng Shou <shoubaineng@gmail.com>
+Date: Thu, 10 Sep 2026 16:07:13 +0800
+Subject: [PATCH] dmaengine: dw-axi-dmac: demote apb_regs warning to debug
+
+dw_axi_dma_set_hw_channel() logs "apb_regs not initialized" at err
+level when apb_regs is absent. However, only Intel KeemBay
+("intel,kmb-axi-dma") carries apb_regs; all other supported SoCs
+(snps,axi-dma-1.01a, sophgo,cv1800b, starfive,jh7110/jh8100) operate
+without it. For those, reaching this path during slave/cyclic prep and
+terminate is the normal no-op case, not an error, and the err log spams
+dmesg on every transfer.
+
+Demote it to dev_dbg to match the identical check in
+dw_axi_dma_set_byte_halfword().
+
+Signed-off-by: Baineng Shou <shoubaineng@gmail.com>
+---
+ drivers/dma/dw-axi-dmac/dw-axi-dmac-platform.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/dma/dw-axi-dmac/dw-axi-dmac-platform.c b/drivers/dma/dw-axi-dmac/dw-axi-dmac-platform.c
+index bcefaff03b5c..d829b9af5491 100644
+--- a/drivers/dma/dw-axi-dmac/dw-axi-dmac-platform.c
++++ b/drivers/dma/dw-axi-dmac/dw-axi-dmac-platform.c
+@@ -574,7 +574,7 @@ static void dw_axi_dma_set_hw_channel(struct axi_dma_chan *chan, bool set)
+ 	unsigned long reg_value, val;
+ 
+ 	if (!chip->apb_regs) {
+-		dev_err(chip->dev, "apb_regs not initialized\n");
++		dev_dbg(chip->dev, "apb_regs not initialized\n");
+ 		return;
+ 	}
+ 
+-- 
+2.34.1
+
